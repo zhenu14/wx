@@ -8,7 +8,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -37,6 +43,9 @@ public class WxController {
     @Value("${wechat.token}")
     private String token;
 
+    @Value("${wechat.url.apiMenuCreate}")
+    private String apiMenuCreate;
+
     //微信参数
     private String accessToken;
     private String jsApiTicket;
@@ -48,37 +57,58 @@ public class WxController {
     private Long ticketExpireTime = 0L;
 
     @GetMapping("/valid")
-    public JSONObject valid(@RequestParam("signature") String signature,
+    public void valid(@RequestParam("signature") String signature,
                        @RequestParam("timestamp") String timestamp,
                        @RequestParam("nonce") String nonce,
                        @RequestParam("echostr") String echostr) {
 
-        JSONObject result = new JSONObject();
+        ServletRequestAttributes requestAttributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        HttpServletRequest request = requestAttributes.getRequest();
+        HttpServletResponse response = requestAttributes.getResponse();
+        try{
+            PrintWriter print = response.getWriter();
 
-        //将token、timestamp、nonce三个参数进行字典序排序
-        String sortString = WxUtil.sort(token, timestamp, nonce);
-        //将三个参数字符串拼接成一个字符串进行sha1加密
-        String myString = WxUtil.sha1(sortString);
-        //开发者获得加密后的字符串可与signature对比，标识该请求来源于微信
-        if (myString != null && myString != "" && myString.equals(signature)) {
-            log.info("签名校验通过");
-            //如果检验成功原样返回echostr，微信服务器接收到此输出，才会确认检验完成。
-            result.put("code",200);
-            result.put("message","签名校验通过");
-            result.put("object",echostr);
-            return result;
-        } else {
-            log.info("签名校验失败");
-            result.put("code",400);
-            result.put("message","签名校验失败");
-            result.put("object",null);
-            return result;
+            if (WxUtil.checkSignature(signature, timestamp, nonce,token)) {
+                log.info("[signature: "+signature + "]<-->[timestamp: "+ timestamp+"]<-->[nonce: "+nonce+"]<-->[echostr: "+echostr+"]");
+//            response.getOutputStream().println(echostr);
+                print.write(echostr);
+            }
+        }catch (IOException e){
+            e.printStackTrace();
         }
+//        JSONObject result = new JSONObject();
+//        log.info("signature :" + signature);
+//        log.info("timestamp :" + timestamp);
+//        log.info("nonce :" + nonce);
+//
+//        //将token、timestamp、nonce三个参数进行字典序排序
+//        String sortString = WxUtil.sort(token, timestamp, nonce);
+//        //将三个参数字符串拼接成一个字符串进行sha1加密
+//        String myString = WxUtil.sha1(sortString);
+//        PrintWriter out = null;
+//        //开发者获得加密后的字符串可与signature对比，标识该请求来源于微信
+//        if (myString != null && myString != "" && myString.equals(signature)) {
+//            log.info("签名校验通过");
+//            //如果检验成功原样返回echostr，微信服务器接收到此输出，才会确认检验完成。
+//            result.put("code",200);
+//            result.put("message","签名校验通过");
+//            result.put("object",echostr);
+//            log.info("echostr :" + echostr);
+//
+//            out.write(echostr);
+//        } else {
+//            log.info("签名校验失败");
+//            result.put("code",400);
+//            result.put("message","签名校验失败");
+//            result.put("object",null);
+//            return;
+////            return result;
+//        }
     }
+
     //获取微信参数
     @RequestMapping(value = "/getTicket")
-    @ResponseBody
-    public Map<String, String> getTicket(String url){
+    public Map<String, String> getTicket(@RequestParam String url){
         //当前时间
         long now = System.currentTimeMillis();
         log.info("currentTime====>"+now+"ms");
